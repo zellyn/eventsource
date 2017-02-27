@@ -54,8 +54,14 @@ func (srv *Server) Close() {
 	srv.quit <- true
 }
 
-// Create a new handler for serving a specified channel
+type EventFn func() (Event, error)
+
 func (srv *Server) Handler(channel string) http.HandlerFunc {
+	return srv.HandlerWithInitialEvent(channel, nil)
+}
+
+// Create a new handler for serving a specified channel and sending an initial event
+func (srv *Server) HandlerWithInitialEvent(channel string, eventFn *EventFn) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		h := w.Header()
 		h.Set("Content-Type", "text/event-stream; charset=utf-8")
@@ -80,6 +86,21 @@ func (srv *Server) Handler(channel string) http.HandlerFunc {
 		notifier := w.(http.CloseNotifier)
 		flusher.Flush()
 		enc := NewEncoder(w, useGzip)
+
+		if eventFn != nil {
+			initialEvt, err := (*eventFn)()
+			if err != nil {
+				if srv.Logger != nil {
+					srv.Logger.Println(err)
+				}
+			} else {
+				err := enc.Encode(initialEvt)
+				if err != nil && srv.Logger != nil {
+					srv.Logger.Println(err)
+				}
+			}
+		}
+
 		for {
 			select {
 			case <-notifier.CloseNotify():
