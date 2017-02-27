@@ -22,16 +22,17 @@ type registration struct {
 }
 
 type Server struct {
-	AllowCORS     bool        // Enable all handlers to be accessible from any origin
-	ReplayAll     bool        // Replay repository even if there's no Last-Event-Id specified
-	BufferSize    int         // How many messages do we let the client get behind before disconnecting
-	Gzip          bool        // Enable compression if client can accept it
-	Logger        *log.Logger // Logger is a logger that, when set, will be used for logging debug messages
-	registrations chan *registration
-	pub           chan *outbound
-	subs          chan *subscription
-	unregister    chan *subscription
-	quit          chan bool
+	AllowCORS         bool        // Enable all handlers to be accessible from any origin
+	ReplayAll         bool        // Replay repository even if there's no Last-Event-Id specified
+	BufferSize        int         // How many messages do we let the client get behind before disconnecting
+	Gzip              bool        // Enable compression if client can accept it
+	Logger            *log.Logger // Logger is a logger that, when set, will be used for logging debug messages
+	registrations     chan *registration
+	pub               chan *outbound
+	subs              chan *subscription
+	unregister        chan *subscription
+	quit              chan bool
+	defaultRepository Repository // A default repository to use if the registration does not have a repository
 }
 
 // Create a new Server ready for handler creation and publishing events
@@ -109,6 +110,12 @@ func (srv *Server) Register(channel string, repo Repository) {
 	}
 }
 
+// RegisterDefaultRepository registers a repository to be used for all channels
+// by default if no per-channel repository has been registered
+func (src *Server) RegisterDefaultRepository(repo Repository) {
+	src.defaultRepository = repo
+}
+
 // Publish an event with the specified id to one or more channels
 func (srv *Server) Publish(channels []string, ev Event) {
 	srv.pub <- &outbound{
@@ -129,7 +136,9 @@ func (srv *Server) run() {
 	for {
 		select {
 		case reg := <-srv.registrations:
-			repos[reg.channel] = reg.repository
+			if reg.repository != nil {
+				repos[reg.channel] = reg.repository
+			}
 		case sub := <-srv.unregister:
 			delete(subs[sub.channel], sub)
 		case pub := <-srv.pub:
@@ -153,6 +162,8 @@ func (srv *Server) run() {
 				repo, ok := repos[sub.channel]
 				if ok {
 					go replay(repo, sub)
+				} else if srv.defaultRepository != nil {
+					go replay(srv.defaultRepository, sub)
 				}
 			}
 		case <-srv.quit:
