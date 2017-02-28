@@ -3,6 +3,8 @@ package eventsource
 import (
 	"log"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"strings"
 )
 
@@ -58,6 +60,57 @@ type EventFn func() (Event, error)
 
 func (srv *Server) Handler(channel string) http.HandlerFunc {
 	return srv.HandlerWithInitialEvent(channel, nil)
+}
+
+// TODO
+func (srv *Server) ProxyingHandler(target *url.URL) http.HandlerFunc {
+	proxy := httputil.NewSingleHostReverseProxy(target)
+
+	transport := makeGripTransport(srv)
+
+	proxy.Transport = transport
+
+	return func(w http.ResponseWriter, req *http.Request) {
+		proxy.ServeHTTP(w, req)
+
+		// Check to see if the Grip-Channel header was specified.
+		// If so, hold the connection
+		if transport.channel == "" {
+			return
+		}
+
+		sub := &subscription{
+			channel:     transport.channel,
+			lastEventId: req.Header.Get("Last-Event-ID"),
+			out:         make(chan Event, srv.BufferSize),
+		}
+		srv.subs <- sub
+		flusher := w.(http.Flusher)
+		notifier := w.(http.CloseNotifier)
+		flusher.Flush()
+		useGzip := srv.Gzip && strings.Contains(req.Header.Get("Accept-Encoding"), "gzip")
+		enc := NewEncoder(w, useGzip)
+
+		for {
+			select {
+			case <-notifier.CloseNotify():
+				srv.unregister <- sub
+				return
+			case ev, ok := <-sub.out:
+				if !ok {
+					return
+				}
+				if err := enc.Encode(ev); err != nil {
+					srv.unregister <- sub
+					if srv.Logger != nil {
+						srv.Logger.Println(err)
+					}
+					return
+				}
+				flusher.Flush()
+			}
+		}
+	}
 }
 
 // Create a new handler for serving a specified channel and sending an initial event
