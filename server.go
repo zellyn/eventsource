@@ -95,8 +95,12 @@ func (srv *Server) HandlerWithInitialEvent(channel string, eventFn *EventFn) htt
 				}
 			} else {
 				err := enc.Encode(initialEvt)
-				if err != nil && srv.Logger != nil {
-					srv.Logger.Println(err)
+				if err != nil {
+					if srv.Logger != nil {
+						srv.Logger.Println(err)
+					}
+				} else {
+					flusher.Flush()
 				}
 			}
 		}
