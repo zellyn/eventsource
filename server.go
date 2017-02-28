@@ -6,6 +6,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
+	"time"
 )
 
 type subscription struct {
@@ -68,7 +69,9 @@ func (srv *Server) ProxyingHandler(target *url.URL) http.HandlerFunc {
 
 	transport := makeGripTransport(srv)
 
+	// TODO is there a way to get this to flush without using an aggressive flush interval?
 	proxy.Transport = transport
+	proxy.FlushInterval = 50 * time.Millisecond
 
 	return func(w http.ResponseWriter, req *http.Request) {
 		proxy.ServeHTTP(w, req)
