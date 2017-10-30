@@ -43,6 +43,10 @@ func (e SubscriptionError) Error() string {
 	return fmt.Sprintf("%d: %s", e.Code, e.Message)
 }
 
+var defaultClient = &http.Client{
+	CheckRedirect: checkRedirect,
+}
+
 // Subscribe to the Events emitted from the specified url.
 // If lastEventId is non-empty it will be sent to the server in case it can replay missed events.
 func Subscribe(url, lastEventId string) (*Stream, error) {
@@ -56,7 +60,7 @@ func Subscribe(url, lastEventId string) (*Stream, error) {
 // SubscribeWithRequest will take an http.Request to setup the stream, allowing custom headers
 // to be specified, authentication to be configured, etc.
 func SubscribeWithRequest(lastEventId string, request *http.Request) (*Stream, error) {
-	return SubscribeWith(lastEventId, http.DefaultClient, request)
+	return SubscribeWith(lastEventId, defaultClient, request)
 }
 
 // SubscribeWith takes a http client and request providing customization over both headers and
@@ -70,7 +74,6 @@ func SubscribeWith(lastEventId string, client *http.Client, request *http.Reques
 		Events:      make(chan Event),
 		Errors:      make(chan error),
 	}
-	stream.c.CheckRedirect = checkRedirect
 
 	r, err := stream.connect()
 	if err != nil {
