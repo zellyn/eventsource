@@ -27,6 +27,17 @@ type comment struct {
 	value string
 }
 
+type NotificationType int
+
+const (
+	Connect NotificationType = iota
+	Disconnect
+)
+
+type Listener interface {
+	Notify(channel string, notificationType NotificationType, args ...interface{})
+}
+
 type Server struct {
 	AllowCORS     bool   // Enable all handlers to be accessible from any origin
 	ReplayAll     bool   // Replay repository even if there's no Last-Event-Id specified
@@ -38,7 +49,7 @@ type Server struct {
 	subs          chan *subscription
 	unregister    chan *subscription
 	quit          chan bool
-	notify        func(string, int) // The listener is notified whenever a new connection is created or destroyed
+	listeners     []Listener // The listener is notified whenever a new connection is created or destroyed
 }
 
 // Create a new Server ready for handler creation and publishing events
@@ -56,8 +67,8 @@ func NewServer() *Server {
 }
 
 // Create a new server with a listener
-func WithListener(srv *Server, n func(string, int)) *Server {
-	srv.notify = n
+func WithListener(srv *Server, n Listener) *Server {
+	srv.listeners = append(srv.listeners, n)
 	return srv
 }
 
@@ -92,16 +103,12 @@ func (srv *Server) Handler(channel string) http.HandlerFunc {
 		notifier := w.(http.CloseNotifier)
 		flusher.Flush()
 		enc := NewEncoder(w, useGzip)
-		if srv.notify != nil {
-			srv.notify(channel, 1)
-		}
+		srv.notifyListeners(channel, Connect)
 		for {
 			select {
 			case <-notifier.CloseNotify():
 				srv.unregister <- sub
-				if srv.notify != nil {
-					srv.notify(channel, -1)
-				}
+				srv.notifyListeners(channel, Disconnect)
 				return
 			case ev, ok := <-sub.out:
 				if !ok {
@@ -112,14 +119,18 @@ func (srv *Server) Handler(channel string) http.HandlerFunc {
 					if srv.Logger != nil {
 						srv.Logger.Println(err)
 					}
-					if srv.notify != nil {
-						srv.notify(channel, -1)
-					}
+					srv.notifyListeners(channel, Disconnect)
 					return
 				}
 				flusher.Flush()
 			}
 		}
+	}
+}
+
+func (srv *Server) notifyListeners(channel string, n NotificationType, args ...interface{}) {
+	for _, listener := range srv.listeners {
+		listener.Notify(channel, n)
 	}
 }
 
