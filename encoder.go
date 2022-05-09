@@ -9,12 +9,13 @@ import (
 
 var (
 	encFields = []struct { //nolint:gochecknoglobals // non-exported global that we treat as a constant
-		prefix string
-		value  func(Event) string
+		prefix   string
+		value    func(Event) string
+		required bool
 	}{
-		{"id: ", Event.Id},
-		{"event: ", Event.Event},
-		{"data: ", Event.Data},
+		{"id: ", Event.Id, false},
+		{"event: ", Event.Event, false},
+		{"data: ", Event.Data, true},
 	}
 )
 
@@ -42,7 +43,7 @@ func (enc *Encoder) Encode(ec eventOrComment) error {
 	case Event:
 		for _, field := range encFields {
 			prefix, value := field.prefix, field.value(item)
-			if len(value) == 0 {
+			if len(value) == 0 && !field.required {
 				continue
 			}
 			for _, s := range strings.Split(value, "\n") {
