@@ -2,6 +2,11 @@
 
 All notable changes to the project will be documented in this file. This project adheres to [Semantic Versioning](http://semver.org).
 
+## [1.7.1] - 2022-05-10
+### Fixed:
+- In the SSE server implementation, removed string concatenation logic that caused writing of large messages to be unnecessarily memory-intensive. (Thanks, [moshegood](https://github.com/launchdarkly/eventsource/pull/35)!)
+- The SSE server implementation did not correctly write a message if the data field was empty: it dropped the field entirely, which would cause clients not to read the message.
+
 ## [1.7.0] - 2022-01-05
 This release includes improvements for SSE spec compliance that do not affect usage in the LaunchDarkly Go SDK, but may be relevant in other use cases.
 
