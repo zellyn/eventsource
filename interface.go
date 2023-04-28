@@ -78,11 +78,26 @@ type StreamErrorHandlerResult struct {
 // In this example, the error handler always logs the error with log.Printf, and it forces the stream to
 // close permanently if there was an HTTP 401 error:
 //
-//     func handleError(err error) eventsource.StreamErrorHandlerResult {
-//         log.Printf("stream error: %s", err)
-//         if se, ok := err.(eventsource.SubscriptionError); ok && se.Code == 401 {
-//             return eventsource.StreamErrorHandlerResult{CloseNow: true}
-//         }
-//         return eventsource.StreamErrorHandlerResult{}
-//     }
+//	func handleError(err error) eventsource.StreamErrorHandlerResult {
+//	    log.Printf("stream error: %s", err)
+//	    if se, ok := err.(eventsource.SubscriptionError); ok && se.Code == 401 {
+//	        return eventsource.StreamErrorHandlerResult{CloseNow: true}
+//	    }
+//	    return eventsource.StreamErrorHandlerResult{}
+//	}
 type StreamErrorHandler func(error) StreamErrorHandlerResult
+
+// EventFilterAction is a value passed back from EventFilter to describe what action should be taken.
+type EventFilterAction int
+
+const (
+	// EventFilterActionAllow means the event should be allowed as normal.
+	EventFilterActionAllow EventFilterAction = iota
+	// EventFilterActionDrop means the event should be silently dropped, as if it had succeeded, but not passed to the subscriber.
+	EventFilterActionDrop
+	// EventFilterActionDisconnect tells the server to gently disconnect the client, forcing it to reconnect.
+	EventFilterActionDisconnect
+)
+
+// EventFilter is the type for per-event subscription filters.
+type EventFilter func(channel string, event Event) EventFilterAction

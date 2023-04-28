@@ -11,6 +11,7 @@ type subscription struct {
 	channel     string
 	lastEventID string
 	out         chan<- eventOrComment
+	filter      EventFilter
 }
 
 type eventOrComment interface{}
@@ -337,6 +338,18 @@ func (srv *Server) markServerClosed() {
 func (s *subscription) send(e eventOrComment) bool {
 	if s.out == nil {
 		return true
+	}
+	if s.filter != nil {
+		if ev, ok := e.(Event); ok {
+			switch s.filter(s.channel, ev) {
+			case EventFilterActionAllow:
+				// continue as before
+			case EventFilterActionDrop:
+				return true
+			case EventFilterActionDisconnect:
+				s.close()
+				return false
+			}
 	}
 	select {
 	case s.out <- e:
